@@ -39,7 +39,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: npm run dev
+    command: node --watch src/server.js
 
 volumes:
   postgres_data:

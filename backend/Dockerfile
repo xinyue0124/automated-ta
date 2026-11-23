@@ -2,7 +2,7 @@ FROM node:20-slim
 
 WORKDIR /app
 
-# Install build dependencies for native modules
+# Build tools for the bcrypt native module
 RUN apt-get update && apt-get install -y \
     python3 \
     make \
@@ -11,12 +11,13 @@ RUN apt-get update && apt-get install -y \
 
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install
+RUN npm ci --omit=dev
 
 COPY . .
 
 EXPOSE 3001
 
-CMD ["npm", "run", "dev"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD node -e "fetch('http://localhost:3001/api/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
+CMD ["npm", "start"]

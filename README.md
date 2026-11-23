@@ -50,6 +50,7 @@ An intelligent teaching assistant that provides personalized help based on stude
 - **Docker** and Docker Compose
 - Containerized PostgreSQL with pgvector
 - Hot-reload development environment
+- GitHub Actions CI: tests against Postgres, then a Docker build
 
 ## Prerequisites
 
@@ -244,15 +245,15 @@ automated_TA/
 
 ### Running Tests
 
-```bash
-# Backend
-cd backend
-npm test
+The backend tests run against a real Postgres with pgvector. They cover rejected tokens, per-user data isolation, input validation, and sign-in rate limiting.
 
-# Frontend
-cd frontend
-npm test
+```bash
+docker-compose up -d postgres
+cd backend
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/automated_ta npm test
 ```
+
+GitHub Actions runs the same tests against a pgvector service container on every push, then builds the backend Docker image.
 
 ### Building for Production
 
@@ -325,7 +326,7 @@ lsof -i :5432  # PostgreSQL
 2. **Use HTTPS**: Enable SSL/TLS in production
 3. **Environment Variables**: Never commit `.env` to version control
 4. **Database Credentials**: Use strong passwords
-5. **Rate Limiting**: Already implemented in backend
+5. **Rate Limiting**: Sign-in and sign-up are limited to 20 attempts per IP every 15 minutes
 6. **Input Validation**: Implemented with express-validator
 7. **CORS**: Configure `CORS_ORIGIN` for your domain
 
