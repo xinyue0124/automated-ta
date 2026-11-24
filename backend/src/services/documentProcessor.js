@@ -1,29 +1,61 @@
 import fs from 'fs/promises';
 import path from 'path';
 import mammoth from 'mammoth';
+import JSZip from 'jszip';
+import { PDFParse } from 'pdf-parse';
 import pool from '../config/database.js';
 import { createEmbedding } from './embeddingService.js';
 
+const XML_ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+
+function decodeXml(text) {
+  return text.replace(/&(amp|lt|gt|quot|apos);/g, (_, name) => XML_ENTITIES[name]);
+}
+
+// A .pptx file is a zip; each slide is ppt/slides/slideN.xml with text in <a:t> runs inside <a:p> paragraphs.
+async function extractPptxText(buffer) {
+  const zip = await JSZip.loadAsync(buffer);
+  const slides = Object.keys(zip.files)
+    .filter((name) => /^ppt\/slides\/slide\d+\.xml$/.test(name))
+    .sort((a, b) => Number(a.match(/\d+/)[0]) - Number(b.match(/\d+/)[0]));
+
+  const slideTexts = [];
+  for (const name of slides) {
+    const xml = await zip.file(name).async('string');
+    const paragraphs = (xml.match(/<a:p(?:\s[^>]*)?>[\s\S]*?<\/a:p>/g) || [])
+      .map((p) => [...p.matchAll(/<a:t(?:\s[^>]*)?>([^<]*)<\/a:t>/g)]
+        .map((m) => decodeXml(m[1]))
+        .join(''))
+      .filter((line) => line.trim());
+    if (paragraphs.length) slideTexts.push(paragraphs.join('\n'));
+  }
+  return slideTexts.join('\n\n');
+}
+
 // Extract text from different file types
-async function extractText(filePath, fileType) {
+export async function extractText(filePath) {
   const ext = path.extname(filePath).toLowerCase();
 
-  try {
-    if (ext === '.pdf') {
-      // For now, return a placeholder for PDF files
-      // In production, you would use a proper PDF parsing library
-      return 'PDF content extraction not available in demo mode. Please use TXT, DOCX, or MD files for now.';
-    } else if (ext === '.docx' || ext === '.doc') {
-      const result = await mammoth.extractRawText({ path: filePath });
-      return result.value;
-    } else if (ext === '.txt' || ext === '.md') {
-      return await fs.readFile(filePath, 'utf-8');
+  if (ext === '.pdf') {
+    const parser = new PDFParse({ data: await fs.readFile(filePath) });
+    try {
+      const { text } = await parser.getText({ pageJoiner: '' });
+      return text;
+    } finally {
+      await parser.destroy();
     }
-    throw new Error('Unsupported file type');
-  } catch (error) {
-    console.error('Error extracting text:', error);
-    throw error;
   }
+  if (ext === '.docx') {
+    const result = await mammoth.extractRawText({ path: filePath });
+    return result.value;
+  }
+  if (ext === '.pptx') {
+    return extractPptxText(await fs.readFile(filePath));
+  }
+  if (ext === '.txt' || ext === '.md') {
+    return fs.readFile(filePath, 'utf-8');
+  }
+  throw new Error(`Unsupported file type: ${ext}`);
 }
 
 // Split text into chunks
@@ -51,7 +83,7 @@ export async function processDocument(documentId, filePath, userId) {
     console.log(`Processing document ${documentId}...`);
 
     // Extract text from document
-    const text = await extractText(filePath, path.extname(filePath));
+    const text = await extractText(filePath);
     
     if (!text || text.trim().length === 0) {
       throw new Error('No text content extracted from document');

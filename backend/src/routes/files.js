@@ -31,12 +31,12 @@ const upload = multer({
     fileSize: 10 * 1024 * 1024 // 10MB limit
   },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ['.pdf', '.txt', '.doc', '.docx', '.md'];
+    const allowedTypes = ['.pdf', '.docx', '.pptx', '.txt', '.md'];
     const ext = path.extname(file.originalname).toLowerCase();
     if (allowedTypes.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Allowed: PDF, TXT, DOC, DOCX, MD'));
+      cb(new Error('Invalid file type. Allowed: PDF, DOCX, PPTX, TXT, MD'));
     }
   }
 });

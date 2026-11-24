@@ -25,8 +25,8 @@ export default function FileUploadModal({ onClose, onUploadComplete }: FileUploa
     accept: {
       'application/pdf': ['.pdf'],
       'text/plain': ['.txt'],
-      'application/msword': ['.doc'],
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx'],
       'text/markdown': ['.md']
     },
     maxFiles: 1,
@@ -97,7 +97,7 @@ export default function FileUploadModal({ onClose, onUploadComplete }: FileUploa
                 Drag & drop your notes here, or click to browse
               </p>
               <p className="text-sm text-gray-500">
-                Supported formats: PDF, TXT, DOC, DOCX, MD (Max 10MB)
+                Supported formats: PDF, DOCX, PPTX, TXT, MD (Max 10MB)
               </p>
             </>
           )}

@@ -10,7 +10,7 @@ An intelligent teaching assistant that provides personalized help based on stude
 - Secure password hashing with bcrypt
 
 📚 **Document Management**
-- Upload class notes (PDF, DOCX, TXT, MD formats)
+- Upload class notes (PDF, DOCX, PPTX, TXT, MD formats)
 - Automatic text extraction and processing
 - Vector embeddings for semantic search
 - Document storage with PostgreSQL + pgvector
@@ -149,7 +149,7 @@ Open your browser and navigate to:
 
 2. **Upload Your Notes**
    - From the dashboard, click "Upload Notes"
-   - Drag & drop or select your class notes (PDF, DOCX, TXT, MD)
+   - Drag & drop or select your class notes (PDF, DOCX, PPTX, TXT, MD)
    - Wait for processing to complete (you'll see a "Processed" status)
 
 3. **Start Chatting**
@@ -311,7 +311,7 @@ lsof -i :5432  # PostgreSQL
 ### File Upload Issues
 - Ensure uploads directory exists and has write permissions
 - Check file size limits (default 10MB)
-- Verify supported file formats (PDF, DOCX, TXT, MD)
+- Verify supported file formats (PDF, DOCX, PPTX, TXT, MD)
 
 ### OpenAI API Issues
 - System works without OpenAI API key (uses mock responses)

@@ -50,7 +50,7 @@ export default function LandingPage() {
                 Upload Your Notes
               </h3>
               <p className="text-gray-600">
-                Upload your class notes, lecture slides, or study materials in PDF, DOCX, or TXT format.
+                Upload your class notes, lecture slides, or study materials in PDF, DOCX, PPTX, or TXT format.
               </p>
             </div>
 

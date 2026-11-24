@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import jwt from 'jsonwebtoken';
 import request from 'supertest';
+import { buildPdf, buildDocx, buildPptx } from './fixtures.js';
 
 process.env.JWT_SECRET ||= 'test-secret';
 
@@ -101,6 +102,39 @@ test('sign-up rejects an invalid email and a short password', async () => {
   assert.equal(res.status, 400);
   const fields = res.body.errors.map((e) => e.path).sort();
   assert.deepEqual(fields, ['email', 'password']);
+});
+
+async function waitForChunks(documentId) {
+  for (let i = 0; i < 50; i++) {
+    const { rows } = await pool.query(
+      'SELECT d.processed, c.content FROM documents d LEFT JOIN document_chunks c ON c.document_id = d.id WHERE d.id = $1',
+      [documentId]
+    );
+    if (rows[0]?.processed) return rows.map((r) => r.content).join(' ');
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`document ${documentId} was not processed`);
+}
+
+test('uploaded PDF, DOCX and PPTX files are parsed into chunks', async () => {
+  const token = await signUp('erin');
+  const files = [
+    ['notes.pdf', buildPdf('Inverted pyramid puts the key facts first')],
+    ['notes.docx', await buildDocx(['Attribute every claim to a named source'])],
+    ['lecture.pptx', await buildPptx({ 1: [['Nut graf'], ['explains why the story matters']] })]
+  ];
+  const expected = ['Inverted pyramid', 'Attribute every claim', 'Nut graf'];
+
+  for (const [i, [name, data]] of files.entries()) {
+    const upload = await request(app)
+      .post('/api/files/upload')
+      .set('Authorization', `Bearer ${token}`)
+      .attach('file', data, name);
+    assert.equal(upload.status, 201, `${name}: ${JSON.stringify(upload.body)}`);
+    const id = upload.body.document.id;
+    assert.match(await waitForChunks(id), new RegExp(expected[i]));
+    await request(app).delete(`/api/files/${id}`).set('Authorization', `Bearer ${token}`);
+  }
 });
 
 test('sign-in is rate limited per IP', async () => {

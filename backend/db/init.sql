@@ -17,11 +17,14 @@ CREATE TABLE IF NOT EXISTS documents (
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
     filename VARCHAR(255) NOT NULL,
     original_name VARCHAR(255) NOT NULL,
-    file_type VARCHAR(50),
+    file_type VARCHAR(255),
     file_size INTEGER,
     upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     processed BOOLEAN DEFAULT FALSE
 );
+
+-- Office MIME types are longer than 50 characters; widen databases created with the old schema.
+ALTER TABLE documents ALTER COLUMN file_type TYPE VARCHAR(255);
 
 -- Document chunks with embeddings
 CREATE TABLE IF NOT EXISTS document_chunks (
