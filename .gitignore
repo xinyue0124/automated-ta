@@ -41,3 +41,6 @@ uploads/
 # Docker
 docker-compose.override.yml
 
+
+# Local embedding model files (downloaded on first use)
+backend/models/

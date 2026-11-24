@@ -9,6 +9,7 @@ import request from 'supertest';
 import { buildPdf, buildDocx, buildPptx } from './fixtures.js';
 
 process.env.JWT_SECRET ||= 'test-secret';
+process.env.EMBEDDING_PROVIDER ||= 'mock';
 
 const { default: pool } = await import('../src/config/database.js');
 const { createApp } = await import('../src/app.js');

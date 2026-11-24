@@ -56,9 +56,12 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create index for vector similarity search
-CREATE INDEX IF NOT EXISTS document_chunks_embedding_idx ON document_chunks 
-USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+-- Vector search is exact over one user's chunks: the user_id index finds them, then Postgres
+-- sorts that user's few hundred or few thousand chunks by cosine distance. The old IVFFlat
+-- index was built on an empty table and filtered by user after an approximate scan; when the
+-- planner used it, retrieval hit@3 fell to 3% (see eval/README.md).
+DROP INDEX IF EXISTS document_chunks_embedding_idx;
+CREATE INDEX IF NOT EXISTS idx_document_chunks_user_id ON document_chunks(user_id);
 
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id);

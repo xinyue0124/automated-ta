@@ -59,7 +59,7 @@ export async function extractText(filePath) {
 }
 
 // Split text into chunks
-function chunkText(text, chunkSize = 1000, overlap = 200) {
+export function chunkText(text, chunkSize = 1000, overlap = 200) {
   const chunks = [];
   let start = 0;
 
@@ -78,7 +78,7 @@ function chunkText(text, chunkSize = 1000, overlap = 200) {
 }
 
 // Process document: extract text, chunk it, create embeddings
-export async function processDocument(documentId, filePath, userId) {
+export async function processDocument(documentId, filePath, userId, { chunkSize = 1000, overlap = 200 } = {}) {
   try {
     console.log(`Processing document ${documentId}...`);
 
@@ -90,7 +90,7 @@ export async function processDocument(documentId, filePath, userId) {
     }
 
     // Split into chunks
-    const chunks = chunkText(text);
+    const chunks = chunkText(text, chunkSize, overlap);
     console.log(`Created ${chunks.length} chunks for document ${documentId}`);
 
     // Create embeddings and store chunks

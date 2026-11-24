@@ -255,6 +255,12 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/automated_ta npm test
 
 GitHub Actions runs the same tests against a pgvector service container on every push, then builds the backend Docker image.
 
+### Retrieval eval
+
+`npm run eval` (in `backend/`, same `DATABASE_URL`) scores retrieval on a 30-question set over sample course materials: hit@1/3/5, MRR, and how well a similarity threshold separates off-topic questions. CI runs it on every push. Method and results: [backend/eval/README.md](backend/eval/README.md).
+
+Without `OPENAI_API_KEY`, embeddings come from a local model (all-MiniLM-L6-v2), downloaded into `backend/models/` on first use. A database must use one embedding provider throughout.
+
 ### Building for Production
 
 ```bash
