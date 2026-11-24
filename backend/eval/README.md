@@ -1,6 +1,6 @@
-# Retrieval eval
+# Eval
 
-Measures whether the assistant finds the right course material for a student's question. It runs the real pipeline: extract text, chunk it, embed it with the local model (all-MiniLM-L6-v2, no API key), store it in Postgres with pgvector, and search it with `searchRelevantChunks`.
+Measures whether the assistant finds the right course material for a student's question, and, with a model key, whether its answers stick to that material and decline questions the material does not cover. It runs the real pipeline: extract text, chunk it, embed it with the local model (all-MiniLM-L6-v2, no API key), store it in Postgres with pgvector, and search it with `searchRelevantChunks`.
 
 - `corpus/`: four documents for a fictional intro reporting course, written for this eval.
 - `questions.json`: 30 student-style questions, each with the passage that answers it, plus 10 questions the materials cannot answer.
@@ -9,7 +9,13 @@ Measures whether the assistant finds the right course material for a student's q
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/automated_ta npm run eval
 ```
 
-Options: `--chunk-size`, `--overlap`, `--threshold`, `--force-index` (disable sequential scans, as Postgres does on large tables), `--tenants N` (add N other users with similar material), `--json out.json`.
+With `OPENAI_API_KEY` set, the same command also scores answers (see below); without a key that part prints "skipped". Any OpenAI-compatible API works:
+
+```bash
+OPENAI_API_KEY=... OPENAI_BASE_URL=https://api.deepseek.com AI_MODEL=deepseek-chat npm run eval
+```
+
+Options: `--retrieval-only` (no model calls), `--chunk-size`, `--overlap`, `--threshold`, `--force-index` (disable sequential scans, as Postgres does on large tables), `--tenants N` (add N other users with similar material), `--json out.json`.
 
 The first run downloads the embedding model (about 90 MB) into `backend/models/`. CI runs the eval on every push and fails if hit@3 drops below 80%.
 
@@ -39,4 +45,14 @@ Findings:
 2. **A similarity threshold alone cannot separate off-topic questions.** Course questions score as low as 0.14, and off-topic questions as high as 0.21. A threshold of 0.22 refuses all 10 off-topic questions but also 1 of 30 course questions, with a thin margin. The threshold is better used as a signal to the model than as a hard refusal.
 3. **Remaining misses are vocabulary gaps**, not chunk boundaries: "ChatGPT" vs "AI tools", "the last story" vs "the final feature".
 
-Not yet measured: answer quality (groundedness, refusals by the model). That needs a model call per question and a scoring rubric.
+## Answer quality
+
+`answers.js` sends each of the 40 questions through the app's own prompt (`buildMessages` in `aiService.js`, top 3 retrieved notes, temperature 0.7), then a judge model (`JUDGE_MODEL`, default the same model, temperature 0) grades the answer against the notes it was given and the reference passage from `questions.json`:
+
+- **groundedness** (0, 1, 2): 2 = every claim is in the notes; 1 = main claim supported, extra unsupported detail; 0 = main claim not in the notes or contradicts them. Reported as the mean over course questions (0–100%) and the share scored 2.
+- **correct**: the answer agrees with the reference passage.
+- **refused**: the answer says the notes do not cover the question. Wanted for the 10 off-topic questions, unwanted for the 30 course questions.
+
+CI runs this part only if the repository has an `OPENAI_API_KEY` secret (plus optional `OPENAI_BASE_URL` and `AI_MODEL` variables); otherwise it is skipped and only retrieval is scored. Limits: one sample per question at temperature 0.7, and a model judging its own answers can be lenient; read the flagged answers the run prints.
+
+Results: not measured yet (no model key on the eval machine).

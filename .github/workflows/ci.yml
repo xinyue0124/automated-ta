@@ -58,6 +58,10 @@ jobs:
         working-directory: backend
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/automated_ta
+      # Answer scoring runs only when the repo has an OPENAI_API_KEY secret; otherwise it is skipped.
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+      AI_MODEL: ${{ vars.AI_MODEL }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -70,10 +74,10 @@ jobs:
           path: backend/models
           key: embedding-model-all-MiniLM-L6-v2
       - run: npm ci
-      - name: Retrieval eval (normal plan)
+      - name: Eval (retrieval; answers if a key is set)
         run: npm run eval -- --json eval-results.json
       - name: Retrieval eval (large-table plan, 50 other tenants)
-        run: npm run eval -- --force-index --tenants 50
+        run: npm run eval -- --force-index --tenants 50 --retrieval-only
       - uses: actions/upload-artifact@v7
         if: always()
         with:

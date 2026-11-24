@@ -3,8 +3,10 @@
 //
 //   DATABASE_URL=... npm run eval -- [--chunk-size 1000] [--overlap 200] [--threshold 0.22]
 //                                   [--force-index] [--tenants N] [--json out.json]
+//                                   [--retrieval-only]
 //
-// Exits 1 if hit@3 falls below MIN_HIT_AT_3, so CI catches retrieval regressions.
+// With OPENAI_API_KEY set it also scores the model's answers (eval/answers.js); without one that
+// part is skipped. Exits 1 if hit@3 falls below MIN_HIT_AT_3, so CI catches retrieval regressions.
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 
@@ -23,7 +25,8 @@ const { values: opts } = parseArgs({
     threshold: { type: 'string', default: '0.22' },
     'force-index': { type: 'boolean', default: false },
     tenants: { type: 'string', default: '0' },
-    json: { type: 'string' }
+    json: { type: 'string' },
+    'retrieval-only': { type: 'boolean', default: false }
   }
 });
 const chunkSize = Number(opts['chunk-size']);
@@ -121,7 +124,18 @@ try {
   const range = (xs) => `${sims(xs)[0].toFixed(2)}–${sims(xs).at(-1).toFixed(2)}`;
   console.log(`\ntop-1 similarity: course questions ${range(results)}, off-topic ${range(offTopic)}`);
 
-  if (opts.json) await writeFile(opts.json, JSON.stringify({ summary, results, offTopic }, null, 2));
+  let answers;
+  if (opts['retrieval-only']) {
+    // no model calls
+  } else if (process.env.OPENAI_API_KEY) {
+    const { evalAnswers, printAnswers } = await import('./answers.js');
+    answers = await evalAnswers(user.id, inScope, outOfScope);
+    printAnswers(answers);
+  } else {
+    console.log('\nanswers: skipped (set OPENAI_API_KEY to score groundedness and refusals)');
+  }
+
+  if (opts.json) await writeFile(opts.json, JSON.stringify({ summary, results, offTopic, answers }, null, 2));
   if (hitAt(3) < MIN_HIT_AT_3) {
     console.error(`\nFAIL: hit@3 ${pct(hitAt(3))} is below ${pct(MIN_HIT_AT_3)}`);
     process.exitCode = 1;

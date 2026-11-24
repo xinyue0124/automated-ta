@@ -255,9 +255,17 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/automated_ta npm test
 
 GitHub Actions runs the same tests against a pgvector service container on every push, then builds the backend Docker image.
 
-### Retrieval eval
+### Eval
 
-`npm run eval` (in `backend/`, same `DATABASE_URL`) scores retrieval on a 30-question set over sample course materials: hit@1/3/5, MRR, and how well a similarity threshold separates off-topic questions. CI runs it on every push. Method and results: [backend/eval/README.md](backend/eval/README.md).
+`npm run eval` (in `backend/`, same `DATABASE_URL`) scores the assistant on 30 course questions and 10 off-topic questions over sample course materials. Retrieval (hit@1/3/5, MRR, off-topic similarity) runs with no API key; with `OPENAI_API_KEY` set it also has a judge model grade each answer for groundedness, correctness and refusals. CI runs it on every push. Method: [backend/eval/README.md](backend/eval/README.md).
+
+Baseline (Nov 2026, chunks of 1000/200 characters, top 3 sent to the model):
+
+| Metric | Result |
+|---|---|
+| Retrieval hit@3 / hit@1 / MRR | 87% / 73% / 0.826 |
+| Off-topic questions below similarity threshold 0.22 | 100% (and 3% of course questions) |
+| Answer groundedness, off-topic refusal rate | not measured yet |
 
 Without `OPENAI_API_KEY`, embeddings come from a local model (all-MiniLM-L6-v2), downloaded into `backend/models/` on first use. A database must use one embedding provider throughout.
 
