@@ -55,4 +55,19 @@ Findings:
 
 CI runs this part only if the repository has an `OPENAI_API_KEY` secret (plus optional `OPENAI_BASE_URL` and `AI_MODEL` variables); otherwise it is skipped and only retrieval is scored. Limits: one sample per question at temperature 0.7, and a model judging its own answers can be lenient; read the flagged answers the run prints.
 
-Results: not measured yet (no model key on the eval machine).
+### Results (Nov 2026, DeepSeek `deepseek-chat` as model and judge, 3 runs)
+
+| Metric | Range over 3 runs |
+|---|---|
+| Groundedness, course questions (mean of 0–2, as %) | 83–85% |
+| Course answers fully grounded (score 2) | 70–73% |
+| Course answers correct | 87–90% (26–27 of 30) |
+| Course questions wrongly refused | 3–7% |
+| Off-topic questions where the answer says the notes don't cover it | 60–80% |
+| Off-topic answers with no outside knowledge (score 2) | 30–60% |
+
+Findings:
+
+1. **Every wrong answer traces to retrieval.** In all 3 runs, each incorrect course answer was a question whose answer passage ranked 4th or 5th, outside the 3 notes the model sees. The model filled the gap from general knowledge ("Can I interview my roommate?" got "yes"; the syllabus forbids it). Better retrieval will fix more answers than prompt changes.
+2. **The model does not stay inside the notes.** The system prompt asks it to use the notes but never says to answer only from them. Most partly grounded answers add plausible advice the notes do not contain. On off-topic questions it often says the notes don't cover the question and then answers anyway (Canberra, the causes of World War I).
+3. **The judge is lenient on refusals.** It marks "your notes don't cover this, but here is the answer" as a refusal, so the second off-topic row, which counts any outside claim, is the stricter number.
