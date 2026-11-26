@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import dotenv from 'dotenv';
 import pool from '../config/database.js';
 import { searchRelevantChunks } from './documentProcessor.js';
+import { recordChatStats } from './telemetry.js';
 
 dotenv.config();
 
@@ -40,6 +41,8 @@ export function buildMessages(userMessage, relevantChunks, history = []) {
   return messages;
 }
 
+// Returns the answer, the token usage the API reports, and the model that actually answered
+// (an alias such as deepseek-chat can point to a newer model).
 export async function completeChat(messages) {
   const completion = await openai.chat.completions.create({
     model: AI_MODEL,
@@ -47,16 +50,21 @@ export async function completeChat(messages) {
     temperature: 0.7,
     max_tokens: 500
   });
-  return completion.choices[0].message.content;
+  return { content: completion.choices[0].message.content, usage: completion.usage, model: completion.model };
 }
 
-export async function generateAIResponse(userMessage, userId, sessionId) {
+// excludeMessageId: the question itself, already saved by the route; it is sent once as the
+// final user message, so it must not also come back in the history.
+export async function generateAIResponse(userMessage, userId, sessionId, { excludeMessageId } = {}) {
   try {
+    const start = performance.now();
+    const stats = {};
     // Search for relevant context from user's notes
-    const relevantChunks = await searchRelevantChunks(userMessage, userId, 3);
+    const relevantChunks = await searchRelevantChunks(userMessage, userId, 3, { timings: stats });
 
     if (!openai) {
       // Mock response when OpenAI is not configured
+      recordChatStats({ ...stats, totalMs: performance.now() - start, model: 'none (demo reply)' });
       const context = formatContext(relevantChunks);
       return `I understand you're asking about: "${userMessage}"\n\n${
         context
@@ -66,15 +74,30 @@ export async function generateAIResponse(userMessage, userId, sessionId) {
     }
 
     // Get recent conversation history
+    const t0 = performance.now();
     const historyResult = await pool.query(
       `SELECT role, content FROM chat_messages
-       WHERE session_id = $1
+       WHERE session_id = $1 AND id IS DISTINCT FROM $2
        ORDER BY created_at DESC
        LIMIT 10`,
-      [sessionId]
+      [sessionId, excludeMessageId ?? null]
     );
 
-    return await completeChat(buildMessages(userMessage, relevantChunks, historyResult.rows.reverse()));
+    const messages = buildMessages(userMessage, relevantChunks, historyResult.rows.reverse());
+    const t1 = performance.now();
+    const answer = await completeChat(messages);
+    const t2 = performance.now();
+    recordChatStats({
+      ...stats,
+      historyMs: t1 - t0,
+      llmMs: t2 - t1,
+      totalMs: t2 - start,
+      model: answer.model,
+      promptTokens: answer.usage?.prompt_tokens,
+      completionTokens: answer.usage?.completion_tokens,
+      cachedPromptTokens: answer.usage?.prompt_cache_hit_tokens ?? answer.usage?.prompt_tokens_details?.cached_tokens
+    });
+    return answer.content;
   } catch (error) {
     console.error('Error generating AI response:', error);
     return 'I apologize, but I encountered an error generating a response. Please try again.';

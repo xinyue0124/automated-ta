@@ -134,9 +134,17 @@ export async function processDocument(documentId, filePath, userId, { chunkSize 
 const CANDIDATES = 20;
 const RRF_K = 60;
 
-export async function searchRelevantChunks(query, userId, limit = 5, { mode = 'hybrid' } = {}) {
+// timings, if given, receives embedMs and searchMs.
+export async function searchRelevantChunks(query, userId, limit = 5, { mode = 'hybrid', timings } = {}) {
   try {
+    const t0 = performance.now();
     const queryEmbedding = JSON.stringify(await createEmbedding(query));
+    const t1 = performance.now();
+    if (timings) timings.embedMs = t1 - t0;
+    const done = (rows) => {
+      if (timings) timings.searchMs = performance.now() - t1;
+      return rows;
+    };
 
     if (mode === 'vector') {
       const result = await pool.query(
@@ -147,7 +155,7 @@ export async function searchRelevantChunks(query, userId, limit = 5, { mode = 'h
          LIMIT $3`,
         [queryEmbedding, userId, limit]
       );
-      return result.rows;
+      return done(result.rows);
     }
 
     // plainto_tsquery ANDs every word, which almost never matches a whole question;
@@ -181,7 +189,7 @@ export async function searchRelevantChunks(query, userId, limit = 5, { mode = 'h
        LIMIT $3`,
       [queryEmbedding, userId, limit, query, CANDIDATES, RRF_K]
     );
-    return result.rows;
+    return done(result.rows);
   } catch (error) {
     console.error('Error searching chunks:', error);
     return [];

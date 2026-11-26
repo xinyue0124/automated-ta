@@ -78,6 +78,8 @@ jobs:
         run: npm run eval -- --json eval-results.json
       - name: Retrieval eval (large-table plan, 50 other tenants)
         run: npm run eval -- --force-index --tenants 50 --retrieval-only
+      - name: Load test (app and database only, no model)
+        run: OPENAI_API_KEY= npm run loadtest -- --concurrency 1,10,50 --requests 200
       - uses: actions/upload-artifact@v7
         if: always()
         with:

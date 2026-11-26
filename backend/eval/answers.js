@@ -54,7 +54,7 @@ ${answer}`;
 
 async function answerAndGrade(userId, q, reference, mode) {
   const chunks = await searchRelevantChunks(q, userId, TOP_K, { mode });
-  const answer = await completeChat(buildMessages(q, chunks));
+  const { content: answer } = await completeChat(buildMessages(q, chunks));
   const verdict = await grade({ q, notes: chunks.map((c) => c.content), reference, answer });
   return { q, reference, answer, ...verdict };
 }

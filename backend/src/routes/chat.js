@@ -115,7 +115,9 @@ router.post('/sessions/:sessionId/messages', authenticateToken, async (req, res)
     );
 
     // Generate AI response with context from user's notes
-    const aiResponse = await generateAIResponse(content, userId, sessionId);
+    const aiResponse = await generateAIResponse(content, userId, sessionId, {
+      excludeMessageId: userMessage.rows[0].id
+    });
 
     // Save AI message
     const aiMessage = await pool.query(
