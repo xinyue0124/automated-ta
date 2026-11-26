@@ -3,7 +3,7 @@
 //
 //   DATABASE_URL=... npm run eval -- [--chunk-size 1000] [--overlap 200] [--threshold 0.22]
 //                                   [--force-index] [--tenants N] [--json out.json]
-//                                   [--retrieval-only]
+//                                   [--retrieval-only] [--retrieval hybrid|vector]
 //
 // With OPENAI_API_KEY set it also scores the model's answers (eval/answers.js); without one that
 // part is skipped. Exits 1 if hit@3 falls below MIN_HIT_AT_3, so CI catches retrieval regressions.
@@ -16,6 +16,8 @@ const { default: pool } = await import('../src/config/database.js');
 const { processDocument, searchRelevantChunks } = await import('../src/services/documentProcessor.js');
 
 const MIN_HIT_AT_3 = 0.8;
+// Best cosine similarity among the results (with hybrid search, the top result may rank by keywords).
+const maxSimilarity = (hits) => Math.max(0, ...hits.map((h) => Number(h.similarity)));
 const K = 5;
 
 const { values: opts } = parseArgs({
@@ -26,12 +28,14 @@ const { values: opts } = parseArgs({
     'force-index': { type: 'boolean', default: false },
     tenants: { type: 'string', default: '0' },
     json: { type: 'string' },
-    'retrieval-only': { type: 'boolean', default: false }
+    'retrieval-only': { type: 'boolean', default: false },
+    retrieval: { type: 'string', default: 'hybrid' } // or 'vector'
   }
 });
 const chunkSize = Number(opts['chunk-size']);
 const overlap = Number(opts.overlap);
 const threshold = Number(opts.threshold);
+const mode = opts.retrieval;
 
 // On a small table Postgres scans it directly. With many rows it uses indexes instead.
 // --force-index disables sequential scans so the eval measures that larger-table plan.
@@ -83,17 +87,17 @@ try {
   const latencies = [];
   for (const item of inScope) {
     const t0 = performance.now();
-    const hits = await searchRelevantChunks(item.q, user.id, K);
+    const hits = await searchRelevantChunks(item.q, user.id, K, { mode });
     latencies.push(performance.now() - t0);
     const rank = hits.findIndex((h) => h.content.includes(item.evidence)) + 1; // 0 = not in top K
-    results.push({ ...item, rank, retrieved: hits.length, top1: Number(hits[0]?.similarity ?? 0) });
+    results.push({ ...item, rank, retrieved: hits.length, top1: maxSimilarity(hits) });
   }
 
   // Out-of-scope questions: the best similarity should be low enough to say "not in your materials"
   const offTopic = [];
   for (const q of outOfScope) {
-    const hits = await searchRelevantChunks(q, user.id, 1);
-    offTopic.push({ q, top1: Number(hits[0]?.similarity ?? 0) });
+    const hits = await searchRelevantChunks(q, user.id, K, { mode });
+    offTopic.push({ q, top1: maxSimilarity(hits) });
   }
 
   const n = results.length;
@@ -105,13 +109,13 @@ try {
   const medianMs = latencies.sort((a, b) => a - b)[Math.floor(latencies.length / 2)];
 
   const summary = {
-    config: { chunkSize, overlap, k: K, threshold, chunks: chunkCount, otherTenants: tenants, forceIndex: opts['force-index'] },
+    config: { retrieval: mode, chunkSize, overlap, k: K, threshold, chunks: chunkCount, otherTenants: tenants, forceIndex: opts['force-index'] },
     retrieval: { 'hit@1': hitAt(1), 'hit@3': hitAt(3), [`hit@${K}`]: hitAt(K), mrr, questionsWithFewerThanKResults: short, medianSearchMs: Math.round(medianMs) },
     outOfScope: { refusedAtThreshold: refused, inScopeWronglyRefused: falseRefusals }
   };
 
   const pct = (x) => `${(x * 100).toFixed(0)}%`;
-  console.log(`\nchunk ${chunkSize}/${overlap}, ${chunkCount} chunks, ${n} questions, k=${K}${tenants ? `, ${tenants} other tenants` : ''}${opts['force-index'] ? ', vector index forced' : ''}`);
+  console.log(`\n${mode} retrieval, chunk ${chunkSize}/${overlap}, ${chunkCount} chunks, ${n} questions, k=${K}${tenants ? `, ${tenants} other tenants` : ''}${opts['force-index'] ? ', vector index forced' : ''}`);
   console.log(`hit@1 ${pct(hitAt(1))}  hit@3 ${pct(hitAt(3))}  hit@${K} ${pct(hitAt(K))}  MRR ${mrr.toFixed(3)}  median search ${medianMs.toFixed(0)} ms`);
   if (short) console.log(`warning: ${short} searches returned fewer than ${K} chunks`);
   console.log(`threshold ${threshold}: refuses ${pct(refused)} of off-topic questions, wrongly refuses ${pct(falseRefusals)} of course questions`);
@@ -129,7 +133,7 @@ try {
     // no model calls
   } else if (process.env.OPENAI_API_KEY) {
     const { evalAnswers, printAnswers } = await import('./answers.js');
-    answers = await evalAnswers(user.id, inScope, outOfScope);
+    answers = await evalAnswers(user.id, inScope, outOfScope, mode);
     printAnswers(answers);
   } else {
     console.log('\nanswers: skipped (set OPENAI_API_KEY to score groundedness and refusals)');

@@ -52,8 +52,8 @@ ${answer}`;
   return v;
 }
 
-async function answerAndGrade(userId, q, reference) {
-  const chunks = await searchRelevantChunks(q, userId, TOP_K);
+async function answerAndGrade(userId, q, reference, mode) {
+  const chunks = await searchRelevantChunks(q, userId, TOP_K, { mode });
   const answer = await completeChat(buildMessages(q, chunks));
   const verdict = await grade({ q, notes: chunks.map((c) => c.content), reference, answer });
   return { q, reference, answer, ...verdict };
@@ -71,13 +71,14 @@ async function mapLimit(items, limit, fn) {
   return out;
 }
 
-export async function evalAnswers(userId, inScope, outOfScope) {
+export async function evalAnswers(userId, inScope, outOfScope, mode = 'hybrid') {
   // The reference for a course question is the passage that answers it, quoted from the corpus.
-  const course = await mapLimit(inScope, CONCURRENCY, (item) => answerAndGrade(userId, item.q, item.evidence));
-  const offTopic = await mapLimit(outOfScope, CONCURRENCY, (q) => answerAndGrade(userId, q, 'NOT IN MATERIALS'));
+  const course = await mapLimit(inScope, CONCURRENCY, (item) => answerAndGrade(userId, item.q, item.evidence, mode));
+  const offTopic = await mapLimit(outOfScope, CONCURRENCY, (q) => answerAndGrade(userId, q, 'NOT IN MATERIALS', mode));
 
   const share = (xs, f) => xs.filter(f).length / xs.length;
   const summary = {
+    retrieval: mode,
     model: AI_MODEL,
     judge: JUDGE_MODEL,
     groundedness: course.reduce((s, r) => s + r.grounded, 0) / (2 * course.length), // 0..1
@@ -92,7 +93,7 @@ export async function evalAnswers(userId, inScope, outOfScope) {
 
 export function printAnswers({ summary, course, offTopic }) {
   const pct = (x) => `${(x * 100).toFixed(0)}%`;
-  console.log(`\nanswers: model ${summary.model}, judge ${summary.judge}, top ${TOP_K} notes`);
+  console.log(`\nanswers: ${summary.retrieval} retrieval, model ${summary.model}, judge ${summary.judge}, top ${TOP_K} notes`);
   console.log(`course questions: groundedness ${pct(summary.groundedness)} (fully grounded ${pct(summary.fullyGrounded)}), correct ${pct(summary.correct)}, wrongly refused ${pct(summary.inScopeRefused)}`);
   console.log(`off-topic questions: refused ${pct(summary.offTopicRefused)}`);
   const flagged = [...course.filter((r) => r.grounded < 2 || !r.correct || r.refused), ...offTopic.filter((r) => !r.refused)];

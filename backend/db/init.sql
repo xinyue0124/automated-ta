@@ -63,6 +63,11 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 DROP INDEX IF EXISTS document_chunks_embedding_idx;
 CREATE INDEX IF NOT EXISTS idx_document_chunks_user_id ON document_chunks(user_id);
 
+-- Keyword side of hybrid search (searchRelevantChunks): stemmed English terms of each chunk.
+ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS content_tsv tsvector
+    GENERATED ALWAYS AS (to_tsvector('english', content)) STORED;
+CREATE INDEX IF NOT EXISTS idx_document_chunks_content_tsv ON document_chunks USING gin(content_tsv);
+
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id);
 CREATE INDEX IF NOT EXISTS idx_document_chunks_document_id ON document_chunks(document_id);

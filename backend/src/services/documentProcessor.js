@@ -126,26 +126,64 @@ export async function processDocument(documentId, filePath, userId, { chunkSize 
 }
 
 // Search for relevant chunks using vector similarity
-export async function searchRelevantChunks(query, userId, limit = 5) {
+// Hybrid search over one user's chunks. Vector search finds paraphrases; keyword search
+// (Postgres full-text, English stemming) finds exact terms the embedding misses, such as
+// "extension" or "roommate". Each side ranks its top CANDIDATES, and reciprocal rank fusion
+// (score = sum of 1 / (60 + rank)) merges the two lists without tuning score scales.
+// mode 'vector' is the old vector-only search, kept for the eval's before/after comparison.
+const CANDIDATES = 20;
+const RRF_K = 60;
+
+export async function searchRelevantChunks(query, userId, limit = 5, { mode = 'hybrid' } = {}) {
   try {
-    // Create embedding for query
-    const queryEmbedding = await createEmbedding(query);
+    const queryEmbedding = JSON.stringify(await createEmbedding(query));
 
-    // Search for similar chunks using cosine similarity
+    if (mode === 'vector') {
+      const result = await pool.query(
+        `SELECT content, 1 - (embedding <=> $1::vector) AS similarity
+         FROM document_chunks
+         WHERE user_id = $2
+         ORDER BY embedding <=> $1::vector
+         LIMIT $3`,
+        [queryEmbedding, userId, limit]
+      );
+      return result.rows;
+    }
+
+    // plainto_tsquery ANDs every word, which almost never matches a whole question;
+    // OR the stemmed words instead and let ts_rank prefer chunks that match more of them.
     const result = await pool.query(
-      `SELECT content, 
-              1 - (embedding <=> $1::vector) as similarity
-       FROM document_chunks
-       WHERE user_id = $2
-       ORDER BY embedding <=> $1::vector
+      `WITH q AS (
+         SELECT replace(plainto_tsquery('english', $4)::text, ' & ', ' | ')::tsquery AS tsq
+       ),
+       vec AS (
+         SELECT id, row_number() OVER (ORDER BY embedding <=> $1::vector, id) AS rank
+         FROM document_chunks
+         WHERE user_id = $2
+         ORDER BY embedding <=> $1::vector, id
+         LIMIT $5
+       ),
+       kw AS (
+         SELECT id, row_number() OVER (ORDER BY ts_rank(content_tsv, q.tsq) DESC, id) AS rank
+         FROM document_chunks, q
+         WHERE user_id = $2 AND content_tsv @@ q.tsq
+         ORDER BY ts_rank(content_tsv, q.tsq) DESC, id
+         LIMIT $5
+       ),
+       fused AS (
+         SELECT id, sum(1.0 / ($6 + rank)) AS score
+         FROM (SELECT * FROM vec UNION ALL SELECT * FROM kw) ranked
+         GROUP BY id
+       )
+       SELECT c.content, 1 - (c.embedding <=> $1::vector) AS similarity
+       FROM fused JOIN document_chunks c USING (id)
+       ORDER BY fused.score DESC, c.id
        LIMIT $3`,
-      [JSON.stringify(queryEmbedding), userId, limit]
+      [queryEmbedding, userId, limit, query, CANDIDATES, RRF_K]
     );
-
     return result.rows;
   } catch (error) {
     console.error('Error searching chunks:', error);
     return [];
   }
 }
-
