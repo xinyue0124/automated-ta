@@ -271,6 +271,38 @@ Results (Nov 2026, chunks of 1000/200 characters, top 3 sent to the model; answe
 
 Without `OPENAI_API_KEY`, embeddings come from a local model (all-MiniLM-L6-v2), downloaded into `backend/models/` on first use. A database must use one embedding provider throughout.
 
+### Load test and per-answer stats
+
+Every chat answer records time per stage (query embedding, search, history, model call), prompt and output tokens, and the model the API reports. They go to the log as one JSON line (`{"event":"chat",...}`; `LOG_CHAT_STATS=0` turns it off).
+
+`npm run loadtest` (in `backend/`, same `DATABASE_URL`) starts the app, ingests the eval course notes for one student, and sends chat messages through the HTTP API with 1, 5, 10 and 20 in flight (`--concurrency 1,10,50 --requests 200` to change). Each message goes to a new session, so every prompt has the same shape. Without `OPENAI_API_KEY` the app gives its demo reply, which measures everything except the model; CI runs that version on every push.
+
+With the model (Nov 2026, DeepSeek: `AI_MODEL=deepseek-chat`, which the API reports as `deepseek-flash`; this Mac, PGlite database):
+
+| Concurrent | Requests | Errors | req/s | p50 | p95 | Search (embed + query) | Model call | Prompt / output tokens | Cost per answer |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 20 | 0 | 0.8 | 1.17 s | 1.76 s | 5 ms | 1.23 s | 736 / 45 | $0.00012 |
+| 10 | 20 | 0 | 6.5 | 1.37 s | 1.57 s | 8 ms | 1.30 s | 736 / 52 | $0.00013 |
+| 50 | 50 | 0 | 24.5 | 1.37 s | 1.67 s | 24 ms | 1.25 s | 736 / 56 | $0.00013 |
+
+Cost uses DeepSeek's published peak rates for deepseek-flash ($0.30 per 1M input tokens on a cache miss, $1.20 per 1M output); off-peak is half. At 50 concurrent, 50 requests is one wave, so req/s is a lower bound.
+
+Without the model (demo reply), app and database only:
+
+| Concurrent | Where | req/s | p50 | p95 | Search (embed + query) |
+|---|---|---|---|---|---|
+| 1 | GitHub Actions runner, Postgres 16 | 42 | 9 ms | 104 ms | 4 ms |
+| 10 | GitHub Actions runner, Postgres 16 | 143 | 65 ms | 99 ms | 19 ms |
+| 50 | GitHub Actions runner, Postgres 16 | 136 | 354 ms | 759 ms | 63 ms |
+| 50 | This Mac, PGlite | 485 | 98 ms | 117 ms | 31 ms |
+
+Findings:
+
+1. **The model is almost all of the latency and all of the cost.** Retrieval takes 5–25 ms of a 1.2–1.4 s answer, so speeding up search would not change what students feel; streaming the answer, a faster model, or a shorter prompt would. The prompt is about 736 tokens, mostly the 3 retrieved notes, so the notes' length sets the cost.
+2. **Latency stays flat from 1 to 50 concurrent students.** p95 stays between 1.57 and 1.76 s with no errors, because each request mostly waits on the model API.
+3. **Without the model, a small CI machine serves about 140 requests per second**, and past 10 concurrent requests extra load turns into queueing (p95 759 ms at 50). Where that queue forms (the 10-connection Postgres pool, or the embedding model on the CPU) is not measured yet.
+4. **The question was sent to the model twice.** The route saved the question and then loaded the session history, which already contained it. Fixed: prompt tokens 747 → 736 per answer.
+
 ### Building for Production
 
 ```bash
