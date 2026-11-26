@@ -259,15 +259,15 @@ GitHub Actions runs the same tests against a pgvector service container on every
 
 `npm run eval` (in `backend/`, same `DATABASE_URL`) scores the assistant on 30 course questions and 10 off-topic questions over sample course materials. Retrieval (hit@1/3/5, MRR, off-topic similarity) runs with no API key; with `OPENAI_API_KEY` set it also has a judge model grade each answer for groundedness, correctness and refusals. CI runs it on every push. Method: [backend/eval/README.md](backend/eval/README.md).
 
-Baseline (Nov 2026, chunks of 1000/200 characters, top 3 sent to the model; answers from DeepSeek `deepseek-chat`, judged by the same model, range over 3 runs):
+Baseline (Nov 2026, chunks of 1000/200 characters, top 3 sent to the model; answers from DeepSeek `deepseek-chat`, judged by the same model, range over 3 runs; before/after detail in the eval README):
 
 | Metric | Result |
 |---|---|
 | Retrieval hit@3 / hit@1 / MRR | 87% / 73% / 0.826 |
 | Off-topic questions below similarity threshold 0.22 | 100% (and 3% of course questions) |
-| Answer groundedness (0–2 rubric, as %) / fully grounded | 83–85% / 70–73% |
-| Course answers correct | 87–90% |
-| Off-topic refusal rate (says the notes don't cover it) | 60–80%; with no outside knowledge at all, 30–60% |
+| Answer groundedness (0–2 rubric, as %) | 98–100% (83–85% before the notes-only prompt) |
+| Off-topic refusal rate | 100% (60–80% before) |
+| Course questions answered and correct | 25 of 30 (26–27 before); the misses are retrieval misses, now refused instead of guessed |
 
 Without `OPENAI_API_KEY`, embeddings come from a local model (all-MiniLM-L6-v2), downloaded into `backend/models/` on first use. A database must use one embedding provider throughout.
 

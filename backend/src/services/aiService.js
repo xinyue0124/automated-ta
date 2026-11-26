@@ -27,7 +27,7 @@ export function buildMessages(userMessage, relevantChunks, history = []) {
       role: 'system',
       content: `You are a helpful teaching assistant. ${
         context
-          ? 'Use the student\'s uploaded notes as context to provide personalized help. Reference specific parts of their notes when relevant.'
+          ? 'Answer only from the student\'s uploaded notes below, and say which note you used. Do not add facts, rules or advice that are not in the notes. If the notes do not answer the question, say that your notes do not cover it and stop: do not answer from general knowledge.'
           : 'The student hasn\'t uploaded any notes yet. Encourage them to upload their class notes for personalized assistance.'
       }`
     }

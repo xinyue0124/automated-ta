@@ -55,19 +55,22 @@ Findings:
 
 CI runs this part only if the repository has an `OPENAI_API_KEY` secret (plus optional `OPENAI_BASE_URL` and `AI_MODEL` variables); otherwise it is skipped and only retrieval is scored. Limits: one sample per question at temperature 0.7, and a model judging its own answers can be lenient; read the flagged answers the run prints.
 
-### Results (Nov 2026, DeepSeek `deepseek-chat` as model and judge, 3 runs)
+### Results (Nov 2026, DeepSeek `deepseek-chat` as model and judge, 3 runs per prompt)
 
-| Metric | Range over 3 runs |
-|---|---|
-| Groundedness, course questions (mean of 0–2, as %) | 83–85% |
-| Course answers fully grounded (score 2) | 70–73% |
-| Course answers correct | 87–90% (26–27 of 30) |
-| Course questions wrongly refused | 3–7% |
-| Off-topic questions where the answer says the notes don't cover it | 60–80% |
-| Off-topic answers with no outside knowledge (score 2) | 30–60% |
+The first prompt asked the model to "use the notes as context". The current prompt says to answer only from the notes, name the note used, and say the notes don't cover a question instead of answering from general knowledge. Same questions, retrieval and judge.
+
+| Metric (range over 3 runs) | Old prompt | Notes-only prompt |
+|---|---|---|
+| Groundedness, course questions (mean of 0–2, as %) | 83–85% | **98–100%** |
+| Course answers fully grounded (score 2) | 70–73% | 97–100% |
+| Off-topic: says the notes don't cover it | 60–80% | **100%** |
+| Off-topic: no outside knowledge at all | 30–60% | 100% |
+| Course questions answered and correct | 26–27 of 30 | 25 of 30 |
+| Course answers confidently wrong | 2–3 | 1–2 |
+| Course questions refused | 3–7% | 10–13% |
 
 Findings:
 
-1. **Every wrong answer traces to retrieval.** In all 3 runs, each incorrect course answer was a question whose answer passage ranked 4th or 5th, outside the 3 notes the model sees. The model filled the gap from general knowledge ("Can I interview my roommate?" got "yes"; the syllabus forbids it). Better retrieval will fix more answers than prompt changes.
-2. **The model does not stay inside the notes.** The system prompt asks it to use the notes but never says to answer only from them. Most partly grounded answers add plausible advice the notes do not contain. On off-topic questions it often says the notes don't cover the question and then answers anyway (Canberra, the causes of World War I).
-3. **The judge is lenient on refusals.** It marks "your notes don't cover this, but here is the answer" as a refusal, so the second off-topic row, which counts any outside claim, is the stricter number.
+1. **Every wrong answer traces to retrieval.** With the old prompt, each incorrect course answer was a question whose answer passage ranked 4th or 5th, outside the 3 notes the model sees, and the model filled the gap from general knowledge ("Can I interview my roommate?" got "yes"; the syllabus forbids it). With the notes-only prompt, the model says the notes don't cover those questions instead. Most of the extra refusals are these honest refusals; better retrieval is what will turn them into answers.
+2. **The notes-only prompt costs one correct answer.** It answers 25 of 30 correctly, against 26–27. The rest of the difference is one real over-refusal ("Can I fix the grammar inside a direct quote?", answer ranked 1st, refused in 1 of 3 runs) and one self-contradicting answer ("Yes, AP style does not use the Oxford comma"). For a course assistant, refusing everything off-topic and not inventing rules is worth that.
+3. **The judge is lenient.** It marks an honest "not covered" as correct when it does not contradict the reference, and "your notes don't cover this, but here is the answer" as a refusal. The "answered and correct" and "no outside knowledge" rows correct for this; read the flagged answers each run prints.
